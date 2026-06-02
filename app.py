@@ -69,16 +69,16 @@ with col1:
 
     st.subheader("2. Upload vergaderstukken")
     agenda_files = st.file_uploader(
-        "Agenda / vergaderstukken (PDF)",
-        type=["pdf"],
+        "Agenda / vergaderstukken (PDF of Word)",
+        type=["pdf", "docx"],
         accept_multiple_files=True,
-        help="Je kunt meerdere PDF-bestanden tegelijk uploaden",
+        help="Je kunt meerdere bestanden tegelijk uploaden (PDF of Word)",
     )
 
     st.subheader("3. Vorige notulen (optioneel)")
     notulen_files = st.file_uploader(
-        "Vorige notulen (PDF)",
-        type=["pdf"],
+        "Vorige notulen (PDF of Word)",
+        type=["pdf", "docx"],
         accept_multiple_files=True,
         key="notulen",
     )
