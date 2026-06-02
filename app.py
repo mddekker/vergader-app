@@ -23,29 +23,58 @@ st.markdown(
     /* Streamlit-elementen verbergen */
     #MainMenu, footer, header, .stDeployButton { display: none !important; }
 
-    /* Typografie + achtergrond */
+    /* Typografie */
     html, body, [data-testid="stAppViewContainer"] {
-        background: #F7F8FB;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
         color: #0F172A;
+    }
+
+    /* Zakelijke achtergrondfoto met overlay */
+    [data-testid="stAppViewContainer"] {
+        background-image:
+            linear-gradient(180deg, rgba(247, 248, 251, 0.92) 0%, rgba(247, 248, 251, 0.96) 100%),
+            url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=2400&q=80&auto=format&fit=crop');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+    }
+
+    /* Subtiele textuur bovenop voor diepte */
+    [data-testid="stAppViewContainer"]::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background:
+            radial-gradient(ellipse at top right, rgba(30, 64, 175, 0.05) 0%, transparent 50%),
+            radial-gradient(ellipse at bottom left, rgba(55, 48, 163, 0.04) 0%, transparent 50%);
+        pointer-events: none;
+        z-index: 0;
     }
 
     .block-container {
         padding-top: 2rem !important;
         padding-bottom: 4rem !important;
         max-width: 1240px !important;
+        position: relative;
+        z-index: 1;
     }
 
-    /* Hero header */
+    /* Hero header met foto achtergrond */
     .hero {
-        background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 50%, #3730A3 100%);
+        background:
+            linear-gradient(135deg, rgba(15, 23, 42, 0.88) 0%, rgba(30, 64, 175, 0.85) 50%, rgba(55, 48, 163, 0.88) 100%),
+            url('https://images.unsplash.com/photo-1556761175-b413da4baf72?w=1600&q=80&auto=format&fit=crop');
+        background-size: cover;
+        background-position: center;
         color: white;
-        padding: 32px 40px;
-        border-radius: 20px;
+        padding: 44px 48px;
+        border-radius: 24px;
         margin-bottom: 32px;
-        box-shadow: 0 10px 40px rgba(30, 58, 138, 0.25);
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.35), inset 0 1px 0 rgba(255,255,255,0.1);
         position: relative;
         overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.08);
     }
     .hero::after {
         content: "";
@@ -81,14 +110,16 @@ st.markdown(
         font-weight: 500;
     }
 
-    /* Card-stijl voor secties */
+    /* Card-stijl voor secties — met glas-effect */
     .card {
-        background: white;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
         border-radius: 16px;
         padding: 24px 28px;
         margin-bottom: 16px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.04);
-        border: 1px solid #E2E8F0;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 32px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.6);
     }
 
     /* Section headers */
@@ -157,21 +188,25 @@ st.markdown(
         font-weight: 500 !important;
     }
 
-    /* File uploader */
+    /* File uploader — glas-effect */
     [data-testid="stFileUploader"] section {
-        background: #F8FAFC !important;
+        background: rgba(248, 250, 252, 0.85) !important;
+        backdrop-filter: blur(10px) !important;
         border: 2px dashed #CBD5E1 !important;
-        border-radius: 12px !important;
-        padding: 20px !important;
+        border-radius: 14px !important;
+        padding: 22px !important;
+        transition: all 0.2s ease !important;
     }
     [data-testid="stFileUploader"] section:hover {
         border-color: #3B82F6 !important;
-        background: #EFF6FF !important;
+        background: rgba(239, 246, 255, 0.9) !important;
+        transform: translateY(-1px);
     }
 
     /* Selectbox */
     [data-testid="stSelectbox"] > div > div {
-        background: white !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        backdrop-filter: blur(10px) !important;
         border: 1px solid #CBD5E1 !important;
         border-radius: 10px !important;
     }
@@ -186,13 +221,17 @@ st.markdown(
     }
     [data-testid="stAlert"] svg { color: #2563EB !important; }
 
-    /* Resultaat-container */
+    /* Resultaat-container — premium card */
     .result-container {
-        background: white;
-        border-radius: 16px;
-        padding: 32px 36px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.04);
-        border: 1px solid #E2E8F0;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-radius: 20px;
+        padding: 36px 40px;
+        box-shadow:
+            0 1px 3px rgba(15, 23, 42, 0.04),
+            0 12px 40px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.7);
         margin-bottom: 16px;
     }
     .result-container h3 {
@@ -421,10 +460,10 @@ with col2:
     else:
         st.markdown(
             """
-<div style="background:white;border:1px dashed #CBD5E1;border-radius:16px;padding:48px 32px;text-align:center;color:#64748B;">
-  <div style="font-size:48px;margin-bottom:12px;">📄</div>
-  <div style="font-size:15px;font-weight:500;color:#475569;">De voorbereiding verschijnt hier na de analyse</div>
-  <div style="font-size:13px;margin-top:6px;">Selecteer een vergadering, upload de stukken, klik op analyseren.</div>
+<div style="background:rgba(255,255,255,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.7);border-radius:20px;padding:64px 40px;text-align:center;color:#64748B;box-shadow:0 8px 32px rgba(15,23,42,0.06);">
+  <div style="font-size:56px;margin-bottom:16px;opacity:0.4;">📄</div>
+  <div style="font-size:16px;font-weight:600;color:#1E293B;margin-bottom:4px;">De briefing verschijnt hier</div>
+  <div style="font-size:13px;color:#64748B;">Selecteer een vergadering, upload de stukken, klik op analyseren.</div>
 </div>
 """,
             unsafe_allow_html=True,
