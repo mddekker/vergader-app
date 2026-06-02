@@ -61,7 +61,7 @@ Sluit af met een **Totaaloverzicht** met:
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model="claude-opus-4-7",
-        max_tokens=4096,
+        max_tokens=16000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
     )
