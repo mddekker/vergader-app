@@ -1,6 +1,7 @@
 import streamlit as st
 import tempfile
 import os
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -8,6 +9,29 @@ from config import VERGADER_TYPES
 from pdf_reader import extract_text
 from analyzer import analyseer_vergadering
 from word_exporter import export_to_word
+
+
+def logo_as_data_uri(path: str) -> str:
+    """Lees logo en geef terug als data URI voor gebruik in CSS background-image."""
+    try:
+        p = Path(path)
+        if not p.exists():
+            return ""
+        data = p.read_bytes()
+        ext = p.suffix.lower().lstrip(".")
+        mime = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "webp": "image/webp",
+            "svg": "image/svg+xml",
+        }.get(ext, "image/png")
+        if ext == "svg":
+            return f"data:{mime};utf8,{data.decode('utf-8').replace('#', '%23')}"
+        b64 = base64.b64encode(data).decode("ascii")
+        return f"data:{mime};base64,{b64}"
+    except Exception:
+        return ""
 
 st.set_page_config(
     page_title="Vergadervoorbereiding",
@@ -75,6 +99,42 @@ st.markdown(
         position: relative;
         overflow: hidden;
         border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* Logo van geselecteerde organisatie in de hero */
+    .org-logo {
+        position: absolute;
+        right: 40px;
+        top: 50%;
+        transform: translateY(-50%);
+        max-width: 200px;
+        max-height: 100px;
+        background: rgba(255, 255, 255, 0.96);
+        padding: 14px 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+        z-index: 2;
+    }
+    .org-logo img {
+        max-width: 100%;
+        max-height: 72px;
+        display: block;
+        object-fit: contain;
+    }
+
+    /* Subtiel watermerk op het hele scherm (grote, vage versie achter de cards) */
+    .org-watermark {
+        position: fixed;
+        bottom: 5%;
+        right: 4%;
+        width: 320px;
+        height: 320px;
+        background-size: contain;
+        background-position: bottom right;
+        background-repeat: no-repeat;
+        opacity: 0.05;
+        z-index: 0;
+        pointer-events: none;
     }
     .hero::after {
         content: "";
@@ -312,17 +372,34 @@ with st.sidebar:
     st.caption("v1.1 — door Martin Dekker")
 
 
-# --- Hero header ---
+# Lees huidige keuze uit session state (uit vorige run), default = eerste optie
+current_type = st.session_state.get("vergader_select", list(VERGADER_TYPES.keys())[0])
+current_logo_uri = logo_as_data_uri(VERGADER_TYPES[current_type].get("logo", ""))
+
+# --- Hero header met dynamisch logo ---
+logo_html = (
+    f'<div class="org-logo"><img src="{current_logo_uri}" alt="logo" /></div>'
+    if current_logo_uri
+    else ""
+)
 st.markdown(
-    """
+    f"""
 <div class="hero">
   <div class="brand-mark">Executive Briefing Tool</div>
   <h1>📋 Vergadervoorbereiding</h1>
   <p>Upload de vergaderstukken — ontvang een volledige briefing per agendapunt, afgestemd op jouw rol.</p>
+  {logo_html}
 </div>
 """,
     unsafe_allow_html=True,
 )
+
+# Subtiel watermerk op achtergrond
+if current_logo_uri:
+    st.markdown(
+        f'<div class="org-watermark" style="background-image: url(\'{current_logo_uri}\');"></div>',
+        unsafe_allow_html=True,
+    )
 
 col1, col2 = st.columns([1, 2], gap="large")
 
@@ -337,6 +414,7 @@ with col1:
             options=list(VERGADER_TYPES.keys()),
             format_func=lambda x: VERGADER_TYPES[x]["label"],
             label_visibility="collapsed",
+            key="vergader_select",
         )
         rol_info = VERGADER_TYPES[vergader_type]["rol"]
         st.info(f"**Jouw rol:** {rol_info}")

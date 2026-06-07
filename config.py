@@ -3,6 +3,7 @@ VERGADER_TYPES = {
         "label": "RBT",
         "rol": "deelnemer namens HumanCapitalCare (algemeen directeur HCC)",
         "is_voorzitter": False,
+        "logo": "assets/logo_rbt.png",
         "context": """Je bereidt Martin voor als deelnemer namens HumanCapitalCare in het Regionaal Bestuurlijk Team (RBT).
 Martin vertegenwoordigt de belangen van HumanCapitalCare. Zijn rol is bij te dragen vanuit het perspectief van HCC,
 kansen en risico's voor HCC te signaleren, en namens HCC standpunten in te nemen.""",
@@ -16,6 +17,7 @@ kansen en risico's voor HCC te signaleren, en namens HCC standpunten in te nemen
         "label": "LMT",
         "rol": "voorzitter",
         "is_voorzitter": True,
+        "logo": "assets/logo_lmt.jpg",
         "context": """Je bereidt Martin voor als voorzitter van het LMT (Leidinggevenden Management Team).
 Als voorzitter leidt Martin de vergadering: hij bewaakt de agenda, stuurt discussies, zorgt dat besluiten helder zijn
 en dat acties worden belegd bij de juiste personen.""",
@@ -29,6 +31,7 @@ en dat acties worden belegd bij de juiste personen.""",
         "label": "RvC iPractice",
         "rol": "voorzitter van de Raad van Commissarissen van iPractice",
         "is_voorzitter": True,
+        "logo": "assets/logo_ipractice.webp",
         "context": """Je bereidt Martin voor als voorzitter van de Raad van Commissarissen (RvC) van iPractice.
 Vanuit zijn toezichthoudende rol let Martin op: strategie en koers, financiële gezondheid, governance en risicobeheer.
 Als voorzitter RvC stelt hij kritische vragen aan het bestuur en zorgt hij dat de RvC zijn toezichthoudende taak goed uitvoert.""",
@@ -42,6 +45,7 @@ Als voorzitter RvC stelt hij kritische vragen aan het bestuur en zorgt hij dat d
         "label": "RvC Sportbedrijf Deventer",
         "rol": "voorzitter van de Raad van Commissarissen van Sportbedrijf Deventer",
         "is_voorzitter": True,
+        "logo": "assets/logo_sportbedrijf.svg",
         "context": """Je bereidt Martin voor als voorzitter van de Raad van Commissarissen (RvC) van Sportbedrijf Deventer.
 Vanuit zijn toezichthoudende rol let Martin op: strategie en koers, financiële gezondheid, governance en risicobeheer,
 en de maatschappelijke functie van het sportbedrijf. Als voorzitter RvC stelt hij kritische vragen aan het bestuur.""",
