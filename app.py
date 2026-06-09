@@ -12,7 +12,7 @@ from word_exporter import export_to_word
 
 
 def logo_as_data_uri(path: str) -> str:
-    """Lees logo en geef terug als data URI voor gebruik in CSS background-image."""
+    """Lees logo en geef terug als base64 data URI."""
     try:
         p = Path(path)
         if not p.exists():
@@ -26,8 +26,7 @@ def logo_as_data_uri(path: str) -> str:
             "webp": "image/webp",
             "svg": "image/svg+xml",
         }.get(ext, "image/png")
-        if ext == "svg":
-            return f"data:{mime};utf8,{data.decode('utf-8').replace('#', '%23')}"
+        # Altijd base64 — voorkomt HTML/CSS escaping problemen bij SVG
         b64 = base64.b64encode(data).decode("ascii")
         return f"data:{mime};base64,{b64}"
     except Exception:
@@ -104,22 +103,40 @@ st.markdown(
     /* Logo van geselecteerde organisatie in de hero */
     .org-logo {
         position: absolute;
-        right: 40px;
+        right: 32px;
         top: 50%;
         transform: translateY(-50%);
-        max-width: 200px;
-        max-height: 100px;
+        width: 240px;
+        height: 96px;
         background: rgba(255, 255, 255, 0.96);
-        padding: 14px 20px;
-        border-radius: 12px;
+        padding: 14px 18px;
+        border-radius: 14px;
         box-shadow: 0 8px 24px rgba(0,0,0,0.25);
         z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
     }
     .org-logo img {
         max-width: 100%;
-        max-height: 72px;
-        display: block;
+        max-height: 100%;
+        width: auto;
+        height: auto;
         object-fit: contain;
+    }
+
+    /* Op smalle schermen: logo onder de tekst zetten ipv naast */
+    @media (max-width: 900px) {
+        .hero { padding: 28px 24px 110px 24px; }
+        .org-logo {
+            right: 24px;
+            top: auto;
+            bottom: 20px;
+            transform: none;
+            width: 180px;
+            height: 72px;
+        }
     }
 
     /* Subtiel watermerk op het hele scherm (grote, vage versie achter de cards) */
