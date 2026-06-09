@@ -20,6 +20,7 @@ def analyseer_vergadering(
     vergader_type: str,
     agenda_tekst: str,
     notulen_tekst: str = "",
+    rbt_tekst: str = "",
 ) -> str:
     config = VERGADER_TYPES[vergader_type]
     is_voorzitter = config.get("is_voorzitter", False)
@@ -29,6 +30,38 @@ def analyseer_vergadering(
         notulen_sectie = f"""
 ## Vorige notulen (ter context)
 {notulen_tekst}
+
+---
+"""
+
+    # Bij LMT: optionele RBT-context voor de mededeling
+    rbt_sectie = ""
+    rbt_instructie = ""
+    if vergader_type == "LMT" and rbt_tekst.strip():
+        rbt_sectie = f"""
+## RBT-stukken (voor de mededeling tijdens LMT)
+{rbt_tekst}
+
+---
+"""
+        rbt_instructie = """
+
+⚠️ EXTRA INSTRUCTIE — MEDEDELING RBT:
+Martin geeft tijdens het LMT bij de mededelingen altijd een korte stand van zaken van wat er in het RBT
+is besproken. Maak hiervoor een aparte sectie HELEMAAL BOVENAAN de briefing, vóór de gewone agendapunten:
+
+### 📢 Mededeling — Stand van zaken RBT
+
+**🎤 Spreektekst (voor de mededelingen):**
+> [5-8 zinnen in Martins directe stijl. Eerste zin direct ter zake: "Even kort de stand van zaken vanuit
+> het RBT." Dan per onderwerp 1-2 zinnen: wat speelt er, waar staan we, wat betekent het voor ons.
+> Sluit af met waar input of vervolg op verwacht wordt. Geen omhaal, geen geleerde woorden.]
+
+**Behandelde onderwerpen (overzicht voor jezelf):**
+- [Korte bullet per RBT-onderwerp — een paar woorden, geen zinnen]
+
+**Eventuele aandachtspunten voor HCC:**
+- [Punten waar HCC iets mee moet of waar Martin alert op moet zijn]
 
 ---
 """
@@ -58,6 +91,7 @@ Eisen aan de spreektekst:
 
     user_prompt = f"""
 {notulen_sectie}
+{rbt_sectie}
 ## Vergaderstukken / agenda
 {agenda_tekst}
 
@@ -67,6 +101,7 @@ Eisen aan de spreektekst:
 Bereid Martin voor op deze vergadering. Hij is {config['rol']}.
 
 {config['context']}
+{rbt_instructie}
 {spreektekst_instructie}
 
 ⚠️ KRITISCH — BESLUITVORMING:

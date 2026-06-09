@@ -464,6 +464,23 @@ with col1:
         label_visibility="collapsed",
     )
 
+    # Extra: alleen bij LMT — upload RBT-stukken voor de mededeling
+    rbt_files = []
+    if vergader_type == "LMT":
+        st.markdown('<div style="height: 16px"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="step-title"><span class="step-number">4</span>RBT-stukken <span style="text-transform:none;font-weight:400;color:#94A3B8;font-size:13px;">(voor mededeling, optioneel)</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Upload hier de stukken van het laatste RBT — de app schrijft hier automatisch een spreektekst van voor je mededelingen.")
+        rbt_files = st.file_uploader(
+            "RBT-stukken (PDF of Word)",
+            type=["pdf", "docx"],
+            accept_multiple_files=True,
+            key="rbt",
+            label_visibility="collapsed",
+        )
+
     st.markdown('<div style="height: 8px"></div>', unsafe_allow_html=True)
 
     analyseer_btn = st.button(
@@ -498,8 +515,17 @@ with col2:
                 except Exception as e:
                     st.error(f"Fout bij lezen van {f.name}: {e}")
 
+            rbt_teksten = []
+            for f in rbt_files:
+                try:
+                    tekst = extract_text(f)
+                    rbt_teksten.append(tekst)
+                except Exception as e:
+                    st.error(f"Fout bij lezen van {f.name}: {e}")
+
             agenda_tekst = "\n\n---\n\n".join(agenda_teksten)
             notulen_tekst = "\n\n---\n\n".join(notulen_teksten)
+            rbt_tekst = "\n\n---\n\n".join(rbt_teksten)
 
             try:
                 resultaat = analyseer_vergadering(
@@ -507,6 +533,7 @@ with col2:
                     vergader_type=vergader_type,
                     agenda_tekst=agenda_tekst,
                     notulen_tekst=notulen_tekst,
+                    rbt_tekst=rbt_tekst,
                 )
                 st.session_state["resultaat"] = resultaat
                 st.session_state["vergader_type"] = vergader_type
