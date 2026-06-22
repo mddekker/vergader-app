@@ -443,10 +443,10 @@ with col1:
         unsafe_allow_html=True,
     )
     agenda_files = st.file_uploader(
-        "Agenda / vergaderstukken (PDF of Word)",
-        type=["pdf", "docx"],
+        "Agenda / vergaderstukken",
+        type=["pdf", "docx", "pptx", "xlsx", "eml", "msg"],
         accept_multiple_files=True,
-        help="Je kunt meerdere bestanden tegelijk uploaden",
+        help="PDF, Word, PowerPoint, Excel of e-mail (.eml / .msg)",
         label_visibility="collapsed",
     )
 
@@ -458,7 +458,7 @@ with col1:
     )
     notulen_files = st.file_uploader(
         "Vorige notulen (PDF of Word)",
-        type=["pdf", "docx"],
+        type=["pdf", "docx", "pptx", "xlsx", "eml", "msg"],
         accept_multiple_files=True,
         key="notulen",
         label_visibility="collapsed",
@@ -475,7 +475,7 @@ with col1:
         st.caption("Upload hier de stukken van het laatste RBT — de app schrijft hier automatisch een spreektekst van voor je mededelingen.")
         rbt_files = st.file_uploader(
             "RBT-stukken (PDF of Word)",
-            type=["pdf", "docx"],
+            type=["pdf", "docx", "pptx", "xlsx", "eml", "msg"],
             accept_multiple_files=True,
             key="rbt",
             label_visibility="collapsed",
