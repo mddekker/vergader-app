@@ -42,15 +42,37 @@ st.set_page_config(
 # --- Professional styling ---
 st.markdown(
     """
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
 <style>
     /* Streamlit-elementen verbergen */
     #MainMenu, footer, header, .stDeployButton { display: none !important; }
 
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(30, 64, 175, 0.2);
+        border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(30, 64, 175, 0.4); }
+
     /* Typografie */
     html, body, [data-testid="stAppViewContainer"] {
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
         color: #0F172A;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
+
+    /* Subtiele fade-in op page load */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .block-container > div { animation: fadeInUp 0.6s ease-out; }
 
     /* Zakelijke achtergrondfoto met overlay */
     [data-testid="stAppViewContainer"] {
@@ -83,21 +105,45 @@ st.markdown(
         z-index: 1;
     }
 
-    /* Hero header met foto achtergrond */
+    /* Hero header — premium glas-look met mesh gradient */
     .hero {
         background:
-            linear-gradient(135deg, rgba(15, 23, 42, 0.88) 0%, rgba(30, 64, 175, 0.85) 50%, rgba(55, 48, 163, 0.88) 100%),
+            radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.4) 0%, transparent 50%),
+            radial-gradient(ellipse at 20% 80%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
+            linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 130, 0.88) 50%, rgba(49, 46, 129, 0.92) 100%),
             url('https://images.unsplash.com/photo-1556761175-b413da4baf72?w=1600&q=80&auto=format&fit=crop');
         background-size: cover;
         background-position: center;
         color: white;
-        padding: 44px 48px;
-        border-radius: 24px;
-        margin-bottom: 32px;
-        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+        padding: 56px 56px;
+        border-radius: 28px;
+        margin-bottom: 40px;
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.08) inset,
+            0 24px 80px rgba(15, 23, 42, 0.45),
+            0 8px 24px rgba(30, 64, 175, 0.25);
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* Subtiele lichtschijn van bovenaf */
+    .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 30%);
+        pointer-events: none;
+    }
+
+    /* Gloeiende rand boven */
+    .hero-glow {
+        position: absolute;
+        top: -2px;
+        left: 20%;
+        right: 20%;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.6), transparent);
     }
 
     /* Logo van geselecteerde organisatie in de hero */
@@ -164,27 +210,50 @@ st.markdown(
         pointer-events: none;
     }
     .hero h1 {
-        font-size: 32px;
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 44px;
         font-weight: 700;
-        margin: 0 0 6px 0;
-        letter-spacing: -0.6px;
+        margin: 12px 0 10px 0;
+        letter-spacing: -1px;
         color: white;
+        line-height: 1.1;
+        position: relative;
+        z-index: 2;
     }
     .hero p {
-        font-size: 15px;
+        font-size: 16px;
         margin: 0;
-        opacity: 0.85;
+        opacity: 0.78;
         font-weight: 400;
+        line-height: 1.5;
+        max-width: 580px;
+        position: relative;
+        z-index: 2;
     }
     .hero .brand-mark {
-        position: absolute;
-        top: 28px;
-        right: 32px;
-        font-size: 11px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 10px;
         text-transform: uppercase;
-        letter-spacing: 2px;
-        opacity: 0.7;
-        font-weight: 500;
+        letter-spacing: 3px;
+        opacity: 0.85;
+        font-weight: 600;
+        padding: 6px 12px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 999px;
+        backdrop-filter: blur(10px);
+        position: relative;
+        z-index: 2;
+    }
+    .hero .brand-mark::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        background: #22D3EE;
+        border-radius: 50%;
+        box-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
     }
 
     /* Card-stijl voor secties — met glas-effect */
@@ -210,49 +279,63 @@ st.markdown(
         margin-top: 0 !important;
     }
 
-    /* Step-nummering */
+    /* Step-nummering — premium ring */
     .step-number {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 28px;
-        height: 28px;
-        background: linear-gradient(135deg, #3B82F6, #2563EB);
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, #312E81 0%, #1E40AF 100%);
         color: white;
         border-radius: 50%;
         font-size: 13px;
-        font-weight: 600;
-        margin-right: 10px;
+        font-weight: 700;
+        margin-right: 12px;
         vertical-align: middle;
-        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+        box-shadow:
+            0 0 0 4px rgba(99, 102, 241, 0.1),
+            0 4px 12px rgba(30, 64, 175, 0.35);
+        font-family: 'Inter', sans-serif;
     }
     .step-title {
-        font-size: 15px;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: 700;
         color: #1E293B;
         margin-bottom: 14px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
 
-    /* Primary knop */
+    /* Primary knop — premium met glow */
     .stButton > button[kind="primary"],
     .stDownloadButton > button {
-        background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 100%) !important;
+        background: linear-gradient(135deg, #312E81 0%, #1E40AF 50%, #1E3A8A 100%) !important;
         color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 14px 24px !important;
+        border: 1px solid rgba(147, 197, 253, 0.2) !important;
+        border-radius: 14px !important;
+        padding: 16px 28px !important;
         font-weight: 600 !important;
         font-size: 15px !important;
         letter-spacing: -0.2px !important;
-        box-shadow: 0 4px 14px rgba(30, 64, 175, 0.3) !important;
-        transition: all 0.2s ease !important;
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.15) inset,
+            0 8px 24px rgba(30, 64, 175, 0.35),
+            0 2px 6px rgba(30, 64, 175, 0.2) !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        position: relative;
+        overflow: hidden;
     }
     .stButton > button[kind="primary"]:hover,
     .stDownloadButton > button:hover {
-        transform: translateY(-1px) !important;
-        box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4) !important;
+        transform: translateY(-2px) !important;
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.2) inset,
+            0 14px 36px rgba(30, 64, 175, 0.5),
+            0 4px 10px rgba(30, 64, 175, 0.3) !important;
+    }
+    .stButton > button[kind="primary"]:active {
+        transform: translateY(0) !important;
     }
 
     /* Secundaire knop */
@@ -313,45 +396,85 @@ st.markdown(
     }
     [data-testid="stAlert"] svg { color: #2563EB !important; }
 
-    /* Resultaat-container — premium card */
+    /* Resultaat-container — premium magazine-look */
     .result-container {
-        background: rgba(255, 255, 255, 0.96);
-        backdrop-filter: blur(24px);
-        -webkit-backdrop-filter: blur(24px);
-        border-radius: 20px;
-        padding: 36px 40px;
+        background: rgba(255, 255, 255, 0.97);
+        backdrop-filter: blur(28px);
+        -webkit-backdrop-filter: blur(28px);
+        border-radius: 24px;
+        padding: 44px 48px;
         box-shadow:
+            0 1px 0 rgba(255,255,255,1) inset,
             0 1px 3px rgba(15, 23, 42, 0.04),
-            0 12px 40px rgba(15, 23, 42, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.7);
+            0 16px 48px rgba(15, 23, 42, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.8);
         margin-bottom: 16px;
+        position: relative;
+    }
+    .result-container::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 24px;
+        right: 24px;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
     }
     .result-container h3 {
-        color: #1E3A8A !important;
-        font-size: 20px !important;
+        color: #312E81 !important;
+        font-family: 'Playfair Display', Georgia, serif !important;
+        font-size: 22px !important;
         font-weight: 700 !important;
-        margin-top: 24px !important;
-        padding-top: 16px !important;
+        margin-top: 32px !important;
+        padding-top: 20px !important;
         border-top: 1px solid #E2E8F0;
+        letter-spacing: -0.4px !important;
     }
-    .result-container h3:first-child { border-top: none; padding-top: 0; }
+    .result-container h3:first-child { border-top: none; padding-top: 0; margin-top: 0 !important; }
+    .result-container p {
+        line-height: 1.7;
+        color: #334155;
+    }
+    .result-container blockquote {
+        border-left: 3px solid #6366F1;
+        background: linear-gradient(135deg, rgba(238, 242, 255, 0.6), rgba(243, 232, 255, 0.4));
+        padding: 16px 20px;
+        border-radius: 0 12px 12px 0;
+        margin: 16px 0;
+        font-style: italic;
+        color: #1E1B4B;
+    }
+    .result-container strong { color: #1E1B4B; }
 
     /* Spinner kleuren */
     .stSpinner > div { border-color: #1E40AF !important; }
 
-    /* Footer */
+    /* Footer — elegant signature */
     .footer {
         text-align: center;
-        padding: 32px 0 16px 0;
-        margin-top: 48px;
-        border-top: 1px solid #E2E8F0;
+        padding: 40px 0 20px 0;
+        margin-top: 64px;
+        position: relative;
         font-size: 12px;
         color: #64748B;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.8px;
+        line-height: 1.8;
+    }
+    .footer::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 30%;
+        right: 30%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
     }
     .footer strong {
-        color: #1E3A8A;
-        font-weight: 600;
+        color: #312E81;
+        font-weight: 700;
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 13px;
+        letter-spacing: 0.3px;
     }
     .footer .signature {
         font-style: italic;
@@ -417,9 +540,10 @@ logo_html = (
 st.markdown(
     f"""
 <div class="hero">
-  <div class="brand-mark">Executive Briefing Tool</div>
-  <h1>📋 Vergadervoorbereiding</h1>
-  <p>Upload de vergaderstukken — ontvang een volledige briefing per agendapunt, afgestemd op jouw rol.</p>
+  <div class="hero-glow"></div>
+  <div class="brand-mark">Executive Briefing</div>
+  <h1>Vergadervoorbereiding</h1>
+  <p>Upload de vergaderstukken — ontvang een volledige briefing per agendapunt, fijn afgestemd op jouw rol als bestuurder.</p>
   {logo_html}
 </div>
 """,
@@ -615,10 +739,58 @@ with col2:
     else:
         st.markdown(
             """
-<div style="background:rgba(255,255,255,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.7);border-radius:20px;padding:64px 40px;text-align:center;color:#64748B;box-shadow:0 8px 32px rgba(15,23,42,0.06);">
-  <div style="font-size:56px;margin-bottom:16px;opacity:0.4;">📄</div>
-  <div style="font-size:16px;font-weight:600;color:#1E293B;margin-bottom:4px;">De briefing verschijnt hier</div>
-  <div style="font-size:13px;color:#64748B;">Selecteer een vergadering, upload de stukken, klik op analyseren.</div>
+<style>
+  @keyframes float-icon {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .empty-state {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 24px;
+    padding: 88px 40px;
+    text-align: center;
+    color: #64748B;
+    box-shadow: 0 12px 48px rgba(15,23,42,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .empty-state::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 24px; right: 24px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99,102,241,0.4), transparent);
+  }
+  .empty-icon {
+    font-size: 72px;
+    margin-bottom: 24px;
+    opacity: 0.5;
+    display: inline-block;
+    animation: float-icon 3.5s ease-in-out infinite;
+    filter: drop-shadow(0 8px 16px rgba(30, 64, 175, 0.15));
+  }
+  .empty-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1E1B4B;
+    margin-bottom: 8px;
+    letter-spacing: -0.4px;
+  }
+  .empty-sub {
+    font-size: 14px;
+    color: #64748B;
+    max-width: 320px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+</style>
+<div class="empty-state">
+  <div class="empty-icon">✨</div>
+  <div class="empty-title">Klaar voor jouw briefing</div>
+  <div class="empty-sub">Selecteer een vergadering, upload de stukken, en je voorbereiding verschijnt hier.</div>
 </div>
 """,
             unsafe_allow_html=True,
