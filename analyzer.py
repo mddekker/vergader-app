@@ -21,6 +21,7 @@ def analyseer_vergadering(
     agenda_tekst: str,
     notulen_tekst: str = "",
     rbt_tekst: str = "",
+    opmerkingen: str = "",
 ) -> str:
     config = VERGADER_TYPES[vergader_type]
     is_voorzitter = config.get("is_voorzitter", False)
@@ -89,9 +90,30 @@ Eisen aan de spreektekst:
 > [3-6 zinnen in Martins directe stijl waarmee hij dit agendapunt opent — direct ter zake, eindigend met een concrete vraag of richting]
 """
 
+    opmerkingen_sectie = ""
+    opmerkingen_instructie = ""
+    if opmerkingen.strip():
+        opmerkingen_sectie = f"""
+## ⭐ Persoonlijke opmerkingen / wensen van Martin
+{opmerkingen}
+
+---
+"""
+        opmerkingen_instructie = """
+
+⚠️ KRITISCH — PERSOONLIJKE OPMERKINGEN MARTIN:
+Martin heeft hierboven zelf opmerkingen meegegeven (extra mededelingen, onderwerpen waar hij extra
+aandacht voor wil, dingen die hij wil agenderen of inbrengen). Deze input WEEGT ZWAAR mee:
+- Verwerk zijn opmerkingen NADRUKKELIJK in de briefing — niet alleen noemen, maar uitwerken
+- Bij onderwerpen waar hij extra aandacht voor wil, geef je een uitgebreidere analyse + scherpe vragen
+- Mededelingen die hij wil toevoegen: schrijf hier een spreektekst voor (in zijn stijl)
+- Voeg een aparte sectie "🌟 Op verzoek van Martin" toe waarin je expliciet ingaat op zijn punten
+"""
+
     user_prompt = f"""
 {notulen_sectie}
 {rbt_sectie}
+{opmerkingen_sectie}
 ## Vergaderstukken / agenda
 {agenda_tekst}
 
@@ -101,6 +123,7 @@ Eisen aan de spreektekst:
 Bereid Martin voor op deze vergadering. Hij is {config['rol']}.
 
 {config['context']}
+{opmerkingen_instructie}
 {rbt_instructie}
 {spreektekst_instructie}
 

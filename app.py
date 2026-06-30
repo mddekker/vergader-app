@@ -288,6 +288,21 @@ st.markdown(
         border-radius: 10px !important;
     }
 
+    /* Tekstvak (opmerkingen) */
+    [data-testid="stTextArea"] textarea {
+        background: rgba(255, 255, 255, 0.92) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 12px !important;
+        font-size: 14px !important;
+        padding: 14px !important;
+        font-family: inherit !important;
+    }
+    [data-testid="stTextArea"] textarea:focus {
+        border-color: #3B82F6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+    }
+
     /* Info-box (rol) */
     [data-testid="stAlert"] {
         background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%) !important;
@@ -481,6 +496,23 @@ with col1:
             label_visibility="collapsed",
         )
 
+    # Stap-nummer voor opmerkingen-veld dynamisch bepalen
+    opmerkingen_stap = 5 if vergader_type == "LMT" else 4
+
+    st.markdown('<div style="height: 16px"></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="step-title"><span class="step-number">{opmerkingen_stap}</span>Jouw opmerkingen <span style="text-transform:none;font-weight:400;color:#94A3B8;font-size:13px;">(optioneel)</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Voeg mededelingen toe, vraag extra aandacht voor onderwerpen, of geef andere wensen mee — de briefing wordt hierop aangepast.")
+    opmerkingen = st.text_area(
+        "Opmerkingen",
+        placeholder="Bijv.: 'Even aandacht voor het budget Q3' • 'Mededeling: nieuwe HR-functionaris start 1 september' • 'Ik wil het scherp krijgen op de planning van project X'",
+        height=120,
+        key="opmerkingen",
+        label_visibility="collapsed",
+    )
+
     st.markdown('<div style="height: 8px"></div>', unsafe_allow_html=True)
 
     analyseer_btn = st.button(
@@ -534,6 +566,7 @@ with col2:
                     agenda_tekst=agenda_tekst,
                     notulen_tekst=notulen_tekst,
                     rbt_tekst=rbt_tekst,
+                    opmerkingen=opmerkingen,
                 )
                 st.session_state["resultaat"] = resultaat
                 st.session_state["vergader_type"] = vergader_type
