@@ -55,4 +55,21 @@ en de maatschappelijke functie van het sportbedrijf. Als voorzitter RvC stelt hi
             "Welke kritische vragen moet Martin als voorzitter RvC stellen aan het bestuur?",
         ],
     },
+    "Stuurgroep DigiV": {
+        "label": "Stuurgroep DigiV",
+        "rol": "voorzitter van de stuurgroep DigiV (HumanTotalCare)",
+        "is_voorzitter": True,
+        "logo": "assets/logo_humantotalcare.png",
+        "context": """Je bereidt Martin voor als voorzitter van de stuurgroep DigiV binnen HumanTotalCare.
+DigiV is een zeer groot, complex en gevoelig project. Als voorzitter leidt Martin de stuurgroep: hij bewaakt
+de voortgang op hoofdlijnen, stuurt scherp op budget en planning, zorgt dat besluitvorming helder en goed
+voorbereid is, en ziet toe op risicobeheersing en tijdige escalatie. Gezien de gevoeligheid van het project
+let hij extra op zorgvuldige communicatie en draagvlak bij de betrokken partijen.""",
+        "vraag_focus": [
+            "Ligt het project op schema en binnen budget, en waar wijkt het af van de vorige rapportage?",
+            "Welke besluiten moet de stuurgroep nemen en zijn de opties en consequenties helder aangeleverd?",
+            "Welke risico's bedreigen planning of budget en zijn de beheersmaatregelen concreet genoeg?",
+            "Wat moet er geëscaleerd worden en wat kan terug naar de projectorganisatie?",
+        ],
+    },
 }
