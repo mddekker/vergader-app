@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 .vergader_app_key
+Claude outputs/

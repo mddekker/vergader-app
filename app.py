@@ -325,7 +325,7 @@ with col_in:
         key="vergader_select",
     )
     st.markdown(f'<div class="rol"><b>Jouw rol:</b> {html.escape(VERGADER_TYPES[vergader_type]["rol"])}</div>', unsafe_allow_html=True)
-    vergaderdatum = st.date_input("Datum van de vergadering", value=date.today(), format="DD-MM-YYYY", key="vergaderdatum")
+    vergaderdatum = st.date_input("Datum van de vergadering", value=date.today(), format="DD-MM-YYYY", key="datum_input")
 
     st.markdown('<div class="step" style="margin-top:14px"><span class="n">2</span>Vergaderstukken</div>', unsafe_allow_html=True)
     st.markdown('<div class="hint">Agenda en onderliggende stukken. PDF, Word, PowerPoint, Excel of e-mail (.eml, .msg).</div>', unsafe_allow_html=True)
@@ -406,8 +406,8 @@ with col_out:
                 "notulen_tekst": notulen_tekst,
                 "rbt_tekst": rbt_tekst,
                 "vergader_type": vergader_type,
-                "vergaderdatum": datum_str,
-                "vergaderdatum_iso": vergaderdatum.isoformat() if vergaderdatum else "",
+                "briefing_datum": datum_str,
+                "briefing_datum_iso": vergaderdatum.isoformat() if vergaderdatum else "",
                 "vervolg": [],
             }
         )
@@ -435,8 +435,8 @@ with col_out:
                     "titel": f"{vergader_type} · {datum_str} · {datetime.now().strftime('%H:%M')}",
                     "resultaat": st.session_state["resultaat"],
                     "vergader_type": vergader_type,
-                    "vergaderdatum": datum_str,
-                    "vergaderdatum_iso": st.session_state.get("vergaderdatum_iso", ""),
+                    "briefing_datum": datum_str,
+                    "briefing_datum_iso": st.session_state.get("briefing_datum_iso", ""),
                 },
             )
             klaar = True
@@ -456,8 +456,8 @@ with col_out:
     elif "resultaat" in st.session_state:
         resultaat = st.session_state["resultaat"]
         vt = st.session_state.get("vergader_type", vergader_type)
-        datum_str = st.session_state.get("vergaderdatum", "")
-        datum_iso = st.session_state.get("vergaderdatum_iso", "")
+        datum_str = st.session_state.get("briefing_datum", "")
+        datum_iso = st.session_state.get("briefing_datum_iso", "")
 
         # Actiebalk
         if "docx_bytes" not in st.session_state:
@@ -562,8 +562,8 @@ with col_out:
                         {
                             "resultaat": item["resultaat"],
                             "vergader_type": item["vergader_type"],
-                            "vergaderdatum": item["vergaderdatum"],
-                            "vergaderdatum_iso": item.get("vergaderdatum_iso", ""),
+                            "briefing_datum": item["briefing_datum"],
+                            "briefing_datum_iso": item.get("briefing_datum_iso", ""),
                             "vervolg": [],
                         }
                     )
