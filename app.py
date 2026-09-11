@@ -1,498 +1,166 @@
-import streamlit as st
-import tempfile
-import os
 import base64
-from datetime import datetime
+import hashlib
+import html
+import io
+import re
+from datetime import date, datetime
 from pathlib import Path
 
-from config import VERGADER_TYPES
-from pdf_reader import extract_text
-from analyzer import analyseer_vergadering
-from word_exporter import export_to_word
+import streamlit as st
+
+from config import VERGADER_TYPES, APP_VERSIE, WAARSCHUW_TEKENS, MAX_TEKENS
+from pdf_reader import extract_document, combine_documents, SUPPORTED_EXTENSIONS
+from analyzer import analyseer_vergadering, stel_vervolgvraag
+from word_exporter import export_to_word_bytes
 
 
-def logo_as_data_uri(path: str) -> str:
-    """Lees logo en geef terug als base64 data URI."""
-    try:
-        p = Path(path)
-        if not p.exists():
-            return ""
-        data = p.read_bytes()
-        ext = p.suffix.lower().lstrip(".")
-        mime = {
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "png": "image/png",
-            "webp": "image/webp",
-            "svg": "image/svg+xml",
-        }.get(ext, "image/png")
-        # Altijd base64 — voorkomt HTML/CSS escaping problemen bij SVG
-        b64 = base64.b64encode(data).decode("ascii")
-        return f"data:{mime};base64,{b64}"
-    except Exception:
-        return ""
+# ---------------------------------------------------------------------------
+# Pagina-instellingen en stijl
+# ---------------------------------------------------------------------------
 
 st.set_page_config(
     page_title="Vergadervoorbereiding",
-    page_icon="📋",
+    page_icon="assets/favicon.png" if Path("assets/favicon.png").exists() else None,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# --- Professional styling ---
-st.markdown(
-    """
+STYLES = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-    /* Streamlit-elementen verbergen */
     #MainMenu, footer, header, .stDeployButton { display: none !important; }
 
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 10px; height: 10px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb {
-        background: rgba(30, 64, 175, 0.2);
-        border-radius: 10px;
+    :root {
+        --navy: #1F3864;
+        --navy-2: #2E5496;
+        --ink: #1F2937;
+        --muted: #6B7280;
+        --line: #E5E7EB;
+        --soft: #F3F5F9;
+        --red: #B42318;
+        --red-soft: #FDECEA;
+        --green: #376E3A;
+        --orange: #C25A00;
+        --blue-soft: #EEF2FF;
     }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(30, 64, 175, 0.4); }
 
-    /* Typografie */
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-        color: #0F172A;
+    html, body, [data-testid="stAppViewContainer"], .stMarkdown, .stButton, .stSelectbox, .stTextArea {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: var(--ink);
         -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
     }
+    [data-testid="stAppViewContainer"] { background: #FFFFFF; }
+    .block-container { padding-top: 1.4rem !important; padding-bottom: 3rem !important; max-width: 1280px !important; }
 
-    /* Subtiele fade-in op page load */
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(8px); }
-        to   { opacity: 1; transform: translateY(0); }
+    /* Kopregel */
+    .topbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+        padding: 14px 0 18px 0; border-bottom: 1px solid var(--line); margin-bottom: 22px;
     }
-    .block-container > div { animation: fadeInUp 0.6s ease-out; }
+    .topbar .title { display: flex; flex-direction: column; gap: 2px; }
+    .topbar .eyebrow { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .topbar h1 { font-size: 26px; font-weight: 700; margin: 0; color: var(--navy); letter-spacing: -0.4px; line-height: 1.2; }
+    .topbar .sub { font-size: 14px; color: var(--muted); margin: 0; }
+    .topbar .logo { height: 54px; max-width: 220px; display: flex; align-items: center; }
+    .topbar .logo img { max-height: 54px; max-width: 220px; object-fit: contain; }
 
-    /* Zakelijke achtergrondfoto met overlay */
-    [data-testid="stAppViewContainer"] {
-        background-image:
-            linear-gradient(180deg, rgba(247, 248, 251, 0.92) 0%, rgba(247, 248, 251, 0.96) 100%),
-            url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=2400&q=80&auto=format&fit=crop');
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-        background-repeat: no-repeat;
-    }
+    /* Stappen */
+    .step { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--navy); margin: 6px 0 8px 0; display: flex; align-items: center; gap: 8px; }
+    .step .n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--navy); color: white; font-size: 11px; font-weight: 700; }
+    .step .opt { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 12px; }
+    .hint { font-size: 13px; color: var(--muted); margin: -2px 0 8px 0; line-height: 1.45; }
 
-    /* Subtiele textuur bovenop voor diepte */
-    [data-testid="stAppViewContainer"]::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        background:
-            radial-gradient(ellipse at top right, rgba(30, 64, 175, 0.05) 0%, transparent 50%),
-            radial-gradient(ellipse at bottom left, rgba(55, 48, 163, 0.04) 0%, transparent 50%);
-        pointer-events: none;
-        z-index: 0;
-    }
+    /* Rolkaart */
+    .rol { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 13.5px; color: var(--ink); margin: 6px 0 14px 0; line-height: 1.45; }
+    .rol b { color: var(--navy); }
 
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 4rem !important;
-        max-width: 1240px !important;
-        position: relative;
-        z-index: 1;
-    }
+    /* Bestandenoverzicht */
+    .files { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 8px 0 12px 0; font-size: 13px; }
+    .files .row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); align-items: baseline; }
+    .files .row:first-child { border-top: none; }
+    .files .name { font-weight: 500; overflow-wrap: anywhere; }
+    .files .meta { color: var(--muted); white-space: nowrap; font-size: 12px; }
+    .files .warn { display: block; color: var(--orange); font-size: 12px; margin-top: 2px; }
+    .files .err { display: block; color: var(--red); font-size: 12px; margin-top: 2px; }
+    .files .total { background: var(--soft); color: var(--muted); font-size: 12px; padding: 7px 12px; border-top: 1px solid var(--line); }
 
-    /* Hero header — premium glas-look met mesh gradient */
-    .hero {
-        background:
-            radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.4) 0%, transparent 50%),
-            radial-gradient(ellipse at 20% 80%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
-            linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 130, 0.88) 50%, rgba(49, 46, 129, 0.92) 100%),
-            url('https://images.unsplash.com/photo-1556761175-b413da4baf72?w=1600&q=80&auto=format&fit=crop');
-        background-size: cover;
-        background-position: center;
-        color: white;
-        padding: 56px 56px;
-        border-radius: 28px;
-        margin-bottom: 40px;
-        box-shadow:
-            0 1px 0 rgba(255,255,255,0.08) inset,
-            0 24px 80px rgba(15, 23, 42, 0.45),
-            0 8px 24px rgba(30, 64, 175, 0.25);
-        position: relative;
-        overflow: hidden;
-        border: 1px solid rgba(255,255,255,0.06);
+    /* Knoppen */
+    .stButton > button[kind="primary"] {
+        background: var(--navy) !important; color: white !important; border: none !important;
+        border-radius: 8px !important; padding: 12px 20px !important; font-weight: 600 !important; font-size: 15px !important;
+        box-shadow: none !important; transition: background 0.15s ease !important;
     }
+    .stButton > button[kind="primary"]:hover { background: var(--navy-2) !important; }
+    .stButton > button:not([kind="primary"]), .stDownloadButton > button {
+        background: white !important; color: var(--navy) !important; border: 1px solid #C7CFDC !important;
+        border-radius: 8px !important; padding: 9px 16px !important; font-weight: 600 !important; font-size: 14px !important; box-shadow: none !important;
+    }
+    .stButton > button:not([kind="primary"]):hover, .stDownloadButton > button:hover { border-color: var(--navy) !important; background: var(--soft) !important; }
 
-    /* Subtiele lichtschijn van bovenaf */
-    .hero::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 30%);
-        pointer-events: none;
-    }
+    /* Invoervelden */
+    [data-testid="stFileUploader"] section { background: var(--soft) !important; border: 1.5px dashed #C7CFDC !important; border-radius: 10px !important; padding: 14px !important; }
+    [data-testid="stFileUploader"] section:hover { border-color: var(--navy) !important; }
+    [data-testid="stTextArea"] textarea { border: 1px solid #C7CFDC !important; border-radius: 8px !important; font-size: 14px !important; }
+    [data-testid="stTextArea"] textarea:focus { border-color: var(--navy) !important; box-shadow: 0 0 0 2px rgba(31,56,100,0.15) !important; }
+    [data-testid="stExpander"] { border: 1px solid var(--line) !important; border-radius: 10px !important; }
+    [data-testid="stExpander"] summary { font-size: 13.5px; font-weight: 600; color: var(--navy); }
 
-    /* Gloeiende rand boven */
-    .hero-glow {
-        position: absolute;
-        top: -2px;
-        left: 20%;
-        right: 20%;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.6), transparent);
-    }
+    /* Resultaat (bordered container) */
+    [data-testid="stVerticalBlockBorderWrapper"] { border: 1px solid var(--line) !important; border-radius: 12px !important; padding: 22px 26px !important; background: white; }
+    .block-container .stMarkdown h2 { font-size: 19px; font-weight: 700; color: var(--navy); margin: 26px 0 10px 0; padding: 18px 0 0 0; border-top: 1px solid var(--line); }
+    .block-container .stMarkdown h3 { font-size: 16px; font-weight: 700; color: var(--navy-2); margin: 22px 0 6px 0; padding: 0; }
+    .block-container .stMarkdown p, .block-container .stMarkdown li { font-size: 14.5px; line-height: 1.6; }
+    .block-container .stMarkdown blockquote { border-left: 3px solid var(--navy-2); background: var(--blue-soft); padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 8px 0 12px 0; color: #1E1B4B; }
+    .block-container .stMarkdown blockquote p { font-style: italic; margin: 0; }
+    .badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; margin: 2px 0 4px 0; }
+    .badge-besluit { background: var(--red-soft); color: var(--red); }
+    .badge-bespreking { background: var(--blue-soft); color: var(--navy-2); }
+    .badge-informatie { background: #EAF4EA; color: var(--green); }
+    .badge-kennisname { background: var(--soft); color: var(--muted); }
+    .bron { font-size: 12.5px; color: var(--muted); font-style: italic; margin: 0 0 8px 0; }
+    .besluit { background: var(--red-soft); border-left: 4px solid var(--red); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 8px 0 10px 0; font-size: 14.5px; line-height: 1.5; }
+    .besluit b { color: var(--red); letter-spacing: 0.5px; margin-right: 6px; }
+    .onzeker { color: var(--orange); font-style: italic; }
 
-    /* Logo van geselecteerde organisatie in de hero */
-    .org-logo {
-        position: absolute;
-        right: 32px;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 240px;
-        height: 96px;
-        background: rgba(255, 255, 255, 0.96);
-        padding: 14px 18px;
-        border-radius: 14px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-        z-index: 2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-    }
-    .org-logo img {
-        max-width: 100%;
-        max-height: 100%;
-        width: auto;
-        height: auto;
-        object-fit: contain;
-    }
+    /* Lege staat */
+    .empty { border: 1px dashed #C7CFDC; border-radius: 12px; padding: 64px 32px; text-align: center; color: var(--muted); background: var(--soft); }
+    .empty .t { font-size: 17px; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
+    .empty .s { font-size: 14px; max-width: 360px; margin: 0 auto; line-height: 1.5; }
 
-    /* Op smalle schermen: logo onder de tekst zetten ipv naast */
-    @media (max-width: 900px) {
-        .hero { padding: 28px 24px 110px 24px; }
-        .org-logo {
-            right: 24px;
-            top: auto;
-            bottom: 20px;
-            transform: none;
-            width: 180px;
-            height: 72px;
-        }
-    }
+    /* Vervolgvragen */
+    .vraag { background: var(--soft); border-radius: 10px; padding: 10px 14px; margin: 10px 0 4px 0; font-size: 14px; font-weight: 600; color: var(--navy); }
 
-    /* Subtiel watermerk op het hele scherm (grote, vage versie achter de cards) */
-    .org-watermark {
-        position: fixed;
-        bottom: 5%;
-        right: 4%;
-        width: 320px;
-        height: 320px;
-        background-size: contain;
-        background-position: bottom right;
-        background-repeat: no-repeat;
-        opacity: 0.05;
-        z-index: 0;
-        pointer-events: none;
-    }
-    .hero::after {
-        content: "";
-        position: absolute;
-        top: -50%;
-        right: -10%;
-        width: 400px;
-        height: 400px;
-        background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
-        pointer-events: none;
-    }
-    .hero h1 {
-        font-family: 'Playfair Display', Georgia, serif;
-        font-size: 44px;
-        font-weight: 700;
-        margin: 12px 0 10px 0;
-        letter-spacing: -1px;
-        color: white;
-        line-height: 1.1;
-        position: relative;
-        z-index: 2;
-    }
-    .hero p {
-        font-size: 16px;
-        margin: 0;
-        opacity: 0.78;
-        font-weight: 400;
-        line-height: 1.5;
-        max-width: 580px;
-        position: relative;
-        z-index: 2;
-    }
-    .hero .brand-mark {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: 3px;
-        opacity: 0.85;
-        font-weight: 600;
-        padding: 6px 12px;
-        background: rgba(255,255,255,0.08);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 999px;
-        backdrop-filter: blur(10px);
-        position: relative;
-        z-index: 2;
-    }
-    .hero .brand-mark::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        background: #22D3EE;
-        border-radius: 50%;
-        box-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
-    }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); }
 
-    /* Card-stijl voor secties — met glas-effect */
-    .card {
-        background: rgba(255, 255, 255, 0.92);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-radius: 16px;
-        padding: 24px 28px;
-        margin-bottom: 16px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 32px rgba(15, 23, 42, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.6);
-    }
+    [data-testid="stSidebar"] { background: var(--soft) !important; border-right: 1px solid var(--line); }
 
-    /* Section headers */
-    h2, h3 {
-        color: #0F172A !important;
-        font-weight: 600 !important;
-        letter-spacing: -0.3px !important;
+    @media (max-width: 640px) {
+        [data-testid="stVerticalBlockBorderWrapper"] { padding: 14px 14px !important; }
+        .topbar h1 { font-size: 22px; }
     }
-    .stMarkdown h3 {
-        font-size: 18px !important;
-        margin-top: 0 !important;
-    }
-
-    /* Step-nummering — premium ring */
-    .step-number {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        background: linear-gradient(135deg, #312E81 0%, #1E40AF 100%);
-        color: white;
-        border-radius: 50%;
-        font-size: 13px;
-        font-weight: 700;
-        margin-right: 12px;
-        vertical-align: middle;
-        box-shadow:
-            0 0 0 4px rgba(99, 102, 241, 0.1),
-            0 4px 12px rgba(30, 64, 175, 0.35);
-        font-family: 'Inter', sans-serif;
-    }
-    .step-title {
-        font-size: 13px;
-        font-weight: 700;
-        color: #1E293B;
-        margin-bottom: 14px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Primary knop — premium met glow */
-    .stButton > button[kind="primary"],
-    .stDownloadButton > button {
-        background: linear-gradient(135deg, #312E81 0%, #1E40AF 50%, #1E3A8A 100%) !important;
-        color: white !important;
-        border: 1px solid rgba(147, 197, 253, 0.2) !important;
-        border-radius: 14px !important;
-        padding: 16px 28px !important;
-        font-weight: 600 !important;
-        font-size: 15px !important;
-        letter-spacing: -0.2px !important;
-        box-shadow:
-            0 1px 0 rgba(255,255,255,0.15) inset,
-            0 8px 24px rgba(30, 64, 175, 0.35),
-            0 2px 6px rgba(30, 64, 175, 0.2) !important;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        position: relative;
-        overflow: hidden;
-    }
-    .stButton > button[kind="primary"]:hover,
-    .stDownloadButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow:
-            0 1px 0 rgba(255,255,255,0.2) inset,
-            0 14px 36px rgba(30, 64, 175, 0.5),
-            0 4px 10px rgba(30, 64, 175, 0.3) !important;
-    }
-    .stButton > button[kind="primary"]:active {
-        transform: translateY(0) !important;
-    }
-
-    /* Secundaire knop */
-    .stButton > button:not([kind="primary"]) {
-        background: white !important;
-        color: #1E293B !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 10px !important;
-        padding: 10px 18px !important;
-        font-weight: 500 !important;
-    }
-
-    /* File uploader — glas-effect */
-    [data-testid="stFileUploader"] section {
-        background: rgba(248, 250, 252, 0.85) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 2px dashed #CBD5E1 !important;
-        border-radius: 14px !important;
-        padding: 22px !important;
-        transition: all 0.2s ease !important;
-    }
-    [data-testid="stFileUploader"] section:hover {
-        border-color: #3B82F6 !important;
-        background: rgba(239, 246, 255, 0.9) !important;
-        transform: translateY(-1px);
-    }
-
-    /* Selectbox */
-    [data-testid="stSelectbox"] > div > div {
-        background: rgba(255, 255, 255, 0.95) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 10px !important;
-    }
-
-    /* Tekstvak (opmerkingen) */
-    [data-testid="stTextArea"] textarea {
-        background: rgba(255, 255, 255, 0.92) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 12px !important;
-        font-size: 14px !important;
-        padding: 14px !important;
-        font-family: inherit !important;
-    }
-    [data-testid="stTextArea"] textarea:focus {
-        border-color: #3B82F6 !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
-    }
-
-    /* Info-box (rol) */
-    [data-testid="stAlert"] {
-        background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%) !important;
-        border: 1px solid #BFDBFE !important;
-        border-radius: 12px !important;
-        color: #1E3A8A !important;
-        padding: 14px 18px !important;
-    }
-    [data-testid="stAlert"] svg { color: #2563EB !important; }
-
-    /* Resultaat-container — premium magazine-look */
-    .result-container {
-        background: rgba(255, 255, 255, 0.97);
-        backdrop-filter: blur(28px);
-        -webkit-backdrop-filter: blur(28px);
-        border-radius: 24px;
-        padding: 44px 48px;
-        box-shadow:
-            0 1px 0 rgba(255,255,255,1) inset,
-            0 1px 3px rgba(15, 23, 42, 0.04),
-            0 16px 48px rgba(15, 23, 42, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.8);
-        margin-bottom: 16px;
-        position: relative;
-    }
-    .result-container::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 24px;
-        right: 24px;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
-    }
-    .result-container h3 {
-        color: #312E81 !important;
-        font-family: 'Playfair Display', Georgia, serif !important;
-        font-size: 22px !important;
-        font-weight: 700 !important;
-        margin-top: 32px !important;
-        padding-top: 20px !important;
-        border-top: 1px solid #E2E8F0;
-        letter-spacing: -0.4px !important;
-    }
-    .result-container h3:first-child { border-top: none; padding-top: 0; margin-top: 0 !important; }
-    .result-container p {
-        line-height: 1.7;
-        color: #334155;
-    }
-    .result-container blockquote {
-        border-left: 3px solid #6366F1;
-        background: linear-gradient(135deg, rgba(238, 242, 255, 0.6), rgba(243, 232, 255, 0.4));
-        padding: 16px 20px;
-        border-radius: 0 12px 12px 0;
-        margin: 16px 0;
-        font-style: italic;
-        color: #1E1B4B;
-    }
-    .result-container strong { color: #1E1B4B; }
-
-    /* Spinner kleuren */
-    .stSpinner > div { border-color: #1E40AF !important; }
-
-    /* Footer — elegant signature */
-    .footer {
-        text-align: center;
-        padding: 40px 0 20px 0;
-        margin-top: 64px;
-        position: relative;
-        font-size: 12px;
-        color: #64748B;
-        letter-spacing: 0.8px;
-        line-height: 1.8;
-    }
-    .footer::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 30%;
-        right: 30%;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
-    }
-    .footer strong {
-        color: #312E81;
-        font-weight: 700;
-        font-family: 'Playfair Display', Georgia, serif;
-        font-size: 13px;
-        letter-spacing: 0.3px;
-    }
-    .footer .signature {
-        font-style: italic;
-        opacity: 0.7;
-    }
-
-    /* Sidebar styling */
-    [data-testid="stSidebar"] {
-        background: #0F172A !important;
-    }
-    [data-testid="stSidebar"] * { color: #E2E8F0 !important; }
-    [data-testid="stSidebar"] input { color: #0F172A !important; }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+"""
+st.markdown(STYLES, unsafe_allow_html=True)
 
-# --- API Key opslag ---
+
+# ---------------------------------------------------------------------------
+# Hulpfuncties
+# ---------------------------------------------------------------------------
+
+def logo_as_data_uri(path: str) -> str:
+    try:
+        p = Path(path)
+        if not p.exists():
+            return ""
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "svg": "image/svg+xml"}.get(
+            p.suffix.lower().lstrip("."), "image/png"
+        )
+        return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+    except Exception:
+        return ""
+
+
 KEY_FILE = Path.home() / ".vergader_app_key"
 
 
@@ -510,300 +178,403 @@ def save_api_key(key: str):
     KEY_FILE.write_text(key.strip())
 
 
-# --- Sidebar: instellingen ---
-with st.sidebar:
-    st.markdown("### ⚙️ Instellingen")
-    api_key = st.text_input(
-        "Anthropic API Key",
-        value=load_api_key(),
-        type="password",
-        help="Je API key van console.anthropic.com",
+@st.cache_data(show_spinner=False, max_entries=64)
+def _lees_bestand(data: bytes, naam: str, _hash: str):
+    buf = io.BytesIO(data)
+    buf.name = naam
+    return extract_document(buf, name=naam)
+
+
+def lees_bestanden(files) -> list:
+    docs = []
+    for f in files or []:
+        data = f.getvalue()
+        digest = hashlib.sha1(data).hexdigest()
+        docs.append(_lees_bestand(data, f.name, digest))
+    return docs
+
+
+def toon_bestanden(docs: list):
+    if not docs:
+        return
+    rows = []
+    totaal = 0
+    for d in docs:
+        meta = d.kind
+        eenheid = {"PDF": "pag.", "PowerPoint": "slides", "Excel": "werkbl."}.get(d.kind)
+        if d.pages and eenheid:
+            meta += f" · {d.pages} {eenheid}"
+        if d.chars:
+            meta += f" · {d.chars // 1000}k tekens"
+        totaal += d.chars
+        extra = ""
+        if d.error:
+            extra = f'<span class="err">{html.escape(d.error)}</span>'
+        elif d.warning:
+            extra = f'<span class="warn">{html.escape(d.warning)}</span>'
+        rows.append(
+            f'<div class="row"><div class="name">{html.escape(d.name)}{extra}</div><div class="meta">{html.escape(meta)}</div></div>'
+        )
+    st.markdown(
+        f'<div class="files">{"".join(rows)}<div class="total">{len(docs)} bestand(en), {totaal // 1000}k tekens leesbaar</div></div>',
+        unsafe_allow_html=True,
     )
+
+
+def verfraai(md: str) -> str:
+    """Maak van de Markdown-briefing nette HTML-accenten (badges, bron, besluitblok, onzekerheden)."""
+    out = []
+    for line in md.splitlines():
+        s = line.strip()
+        m = re.match(r"^\**Type:?\**\s*:?\s*(.+)$", s, flags=re.IGNORECASE)
+        if m and len(s) < 60:
+            waarde = m.group(1).strip("* ").strip()
+            key = waarde.lower()
+            cls = "badge-kennisname"
+            if "besluit" in key:
+                cls = "badge-besluit"
+            elif "bespreking" in key or "discussie" in key:
+                cls = "badge-bespreking"
+            elif "informatie" in key:
+                cls = "badge-informatie"
+            out.extend(["", f'<span class="badge {cls}">{html.escape(waarde)}</span>', ""])
+            continue
+        m = re.match(r"^\**Bron:?\**\s*:?\s*(.+)$", s, flags=re.IGNORECASE)
+        if m:
+            out.extend(["", f'<div class="bron">Bron: {html.escape(m.group(1).strip("* "))}</div>', ""])
+            continue
+        m = re.match(r"^[\W_]*\**BESLUIT VEREIST\**[\W_]*:?\s*(.*)$", s, flags=re.IGNORECASE)
+        if m:
+            out.extend(["", f'<div class="besluit"><b>BESLUIT VEREIST</b>{html.escape(m.group(1))}</div>', ""])
+            continue
+        line = re.sub(
+            r"\[(Niet geverifieerd|Afleiding|Schatting|Speculatie|Aanname)([^\]]*)\]",
+            r'<span class="onzeker">[\1\2]</span>',
+            line,
+        )
+        out.append(line)
+    return "\n".join(out)
+
+
+def bestandsnaam(vt: str, datum_iso: str, ext: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", vt.lower()).strip("_")
+    d = datum_iso or datetime.now().strftime("%Y-%m-%d")
+    return f"vergadervoorbereiding_{slug}_{d}.{ext}"
+
+
+def datum_tekst(d) -> str:
+    if not d:
+        return ""
+    maanden = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"]
+    return f"{d.day} {maanden[d.month - 1]} {d.year}"
+
+
+def reset_resultaat():
+    for k in ("resultaat", "vervolg", "docx_bytes"):
+        st.session_state.pop(k, None)
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.markdown("**Instellingen**")
+    api_key = st.text_input("Anthropic API key", value=load_api_key(), type="password", help="Van console.anthropic.com")
     if st.button("Opslaan", use_container_width=True):
         save_api_key(api_key)
-        st.success("API key opgeslagen!")
-
+        st.success("API key opgeslagen.")
     st.divider()
-    st.caption("v1.1 — door Martin Dekker")
+    st.caption(f"Vergadervoorbereiding v{APP_VERSIE}")
 
 
-# Lees huidige keuze uit session state (uit vorige run), default = eerste optie
+# ---------------------------------------------------------------------------
+# Kopregel
+# ---------------------------------------------------------------------------
+
 current_type = st.session_state.get("vergader_select", list(VERGADER_TYPES.keys())[0])
-current_logo_uri = logo_as_data_uri(VERGADER_TYPES[current_type].get("logo", ""))
-
-# --- Hero header met dynamisch logo ---
-logo_html = (
-    f'<div class="org-logo"><img src="{current_logo_uri}" alt="logo" /></div>'
-    if current_logo_uri
-    else ""
-)
+logo_uri = logo_as_data_uri(VERGADER_TYPES[current_type].get("logo", ""))
+logo_html = f'<div class="logo"><img src="{logo_uri}" alt="logo"></div>' if logo_uri else ""
 st.markdown(
     f"""
-<div class="hero">
-  <div class="hero-glow"></div>
-  <div class="brand-mark">Executive Briefing</div>
-  <h1>Vergadervoorbereiding</h1>
-  <p>Upload de vergaderstukken — ontvang een volledige briefing per agendapunt, fijn afgestemd op jouw rol als bestuurder.</p>
+<div class="topbar">
+  <div class="title">
+    <div class="eyebrow">Executive briefing</div>
+    <h1>Vergadervoorbereiding</h1>
+    <p class="sub">Upload de stukken en ontvang per agendapunt een briefing, afgestemd op jouw rol.</p>
+  </div>
   {logo_html}
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-# Subtiel watermerk op achtergrond
-if current_logo_uri:
-    st.markdown(
-        f'<div class="org-watermark" style="background-image: url(\'{current_logo_uri}\');"></div>',
-        unsafe_allow_html=True,
+col_in, col_out = st.columns([5, 7], gap="large")
+
+# ---------------------------------------------------------------------------
+# Linkerkolom: invoer
+# ---------------------------------------------------------------------------
+
+with col_in:
+    st.markdown('<div class="step"><span class="n">1</span>Vergadering</div>', unsafe_allow_html=True)
+    vergader_type = st.selectbox(
+        "Vergadertype",
+        options=list(VERGADER_TYPES.keys()),
+        format_func=lambda x: VERGADER_TYPES[x]["label"],
+        label_visibility="collapsed",
+        key="vergader_select",
     )
+    st.markdown(f'<div class="rol"><b>Jouw rol:</b> {html.escape(VERGADER_TYPES[vergader_type]["rol"])}</div>', unsafe_allow_html=True)
+    vergaderdatum = st.date_input("Datum van de vergadering", value=date.today(), format="DD-MM-YYYY", key="vergaderdatum")
 
-col1, col2 = st.columns([1, 2], gap="large")
-
-with col1:
-    with st.container():
-        st.markdown(
-            '<div class="step-title"><span class="step-number">1</span>Selecteer vergadering</div>',
-            unsafe_allow_html=True,
-        )
-        vergader_type = st.selectbox(
-            "Vergadertype",
-            options=list(VERGADER_TYPES.keys()),
-            format_func=lambda x: VERGADER_TYPES[x]["label"],
-            label_visibility="collapsed",
-            key="vergader_select",
-        )
-        rol_info = VERGADER_TYPES[vergader_type]["rol"]
-        st.info(f"**Jouw rol:** {rol_info}")
-
-    st.markdown('<div style="height: 16px"></div>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<div class="step-title"><span class="step-number">2</span>Upload vergaderstukken</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="step" style="margin-top:14px"><span class="n">2</span>Vergaderstukken</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hint">Agenda en onderliggende stukken. PDF, Word, PowerPoint, Excel of e-mail (.eml, .msg).</div>', unsafe_allow_html=True)
     agenda_files = st.file_uploader(
-        "Agenda / vergaderstukken",
-        type=["pdf", "docx", "pptx", "xlsx", "eml", "msg"],
+        "Vergaderstukken",
+        type=SUPPORTED_EXTENSIONS,
         accept_multiple_files=True,
-        help="PDF, Word, PowerPoint, Excel of e-mail (.eml / .msg)",
         label_visibility="collapsed",
+        key="agenda_files",
     )
+    agenda_docs = lees_bestanden(agenda_files)
+    toon_bestanden(agenda_docs)
 
-    st.markdown('<div style="height: 16px"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="step" style="margin-top:14px"><span class="n">3</span>Context <span class="opt">(optioneel)</span></div>', unsafe_allow_html=True)
+    with st.expander("Vorige notulen"):
+        st.markdown('<div class="hint">De briefing checkt dan of openstaande acties uit de vorige vergadering terugkomen.</div>', unsafe_allow_html=True)
+        notulen_files = st.file_uploader("Vorige notulen", type=SUPPORTED_EXTENSIONS, accept_multiple_files=True, key="notulen_files", label_visibility="collapsed")
+        notulen_docs = lees_bestanden(notulen_files)
+        toon_bestanden(notulen_docs)
 
-    st.markdown(
-        '<div class="step-title"><span class="step-number">3</span>Vorige notulen <span style="text-transform:none;font-weight:400;color:#94A3B8;font-size:13px;">(optioneel)</span></div>',
-        unsafe_allow_html=True,
-    )
-    notulen_files = st.file_uploader(
-        "Vorige notulen (PDF of Word)",
-        type=["pdf", "docx", "pptx", "xlsx", "eml", "msg"],
-        accept_multiple_files=True,
-        key="notulen",
-        label_visibility="collapsed",
-    )
-
-    # Extra: alleen bij LMT — upload RBT-stukken voor de mededeling
-    rbt_files = []
+    rbt_docs = []
     if vergader_type == "LMT":
-        st.markdown('<div style="height: 16px"></div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="step-title"><span class="step-number">4</span>RBT-stukken <span style="text-transform:none;font-weight:400;color:#94A3B8;font-size:13px;">(voor mededeling, optioneel)</span></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("Upload hier de stukken van het laatste RBT — de app schrijft hier automatisch een spreektekst van voor je mededelingen.")
-        rbt_files = st.file_uploader(
-            "RBT-stukken (PDF of Word)",
-            type=["pdf", "docx", "pptx", "xlsx", "eml", "msg"],
-            accept_multiple_files=True,
-            key="rbt",
-            label_visibility="collapsed",
-        )
+        with st.expander("RBT-stukken voor je mededeling"):
+            st.markdown('<div class="hint">Upload de stukken van het laatste RBT. De briefing begint dan met een spreektekst voor je mededelingen.</div>', unsafe_allow_html=True)
+            rbt_files = st.file_uploader("RBT-stukken", type=SUPPORTED_EXTENSIONS, accept_multiple_files=True, key="rbt_files", label_visibility="collapsed")
+            rbt_docs = lees_bestanden(rbt_files)
+            toon_bestanden(rbt_docs)
 
-    # Stap-nummer voor opmerkingen-veld dynamisch bepalen
-    opmerkingen_stap = 5 if vergader_type == "LMT" else 4
-
-    st.markdown('<div style="height: 16px"></div>', unsafe_allow_html=True)
-    st.markdown(
-        f'<div class="step-title"><span class="step-number">{opmerkingen_stap}</span>Jouw opmerkingen <span style="text-transform:none;font-weight:400;color:#94A3B8;font-size:13px;">(optioneel)</span></div>',
-        unsafe_allow_html=True,
-    )
-    st.caption("Voeg mededelingen toe, vraag extra aandacht voor onderwerpen, of geef andere wensen mee — de briefing wordt hierop aangepast.")
+    st.markdown('<div class="step" style="margin-top:14px"><span class="n">4</span>Jouw opmerkingen <span class="opt">(optioneel)</span></div>', unsafe_allow_html=True)
     opmerkingen = st.text_area(
         "Opmerkingen",
-        placeholder="Bijv.: 'Even aandacht voor het budget Q3' • 'Mededeling: nieuwe HR-functionaris start 1 september' • 'Ik wil het scherp krijgen op de planning van project X'",
-        height=120,
+        placeholder="Bijv.: 'Even aandacht voor het budget Q3', 'Mededeling: nieuwe HR-functionaris start 1 oktober', 'Ik wil het scherp krijgen op de planning van project X'",
+        height=110,
         key="opmerkingen",
         label_visibility="collapsed",
     )
 
-    st.markdown('<div style="height: 8px"></div>', unsafe_allow_html=True)
+    # Omvang en waarschuwingen
+    leesbare_docs = [d for d in agenda_docs if d.ok and d.text]
+    totaal_tekens = sum(d.chars for d in leesbare_docs) + sum(d.chars for d in notulen_docs if d.ok) + sum(d.chars for d in rbt_docs if d.ok)
+    te_groot = totaal_tekens > MAX_TEKENS
 
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
     analyseer_btn = st.button(
-        "🔍  Analyseer vergadering",
+        "Analyseer vergadering",
         type="primary",
-        disabled=not agenda_files or not api_key,
+        disabled=not leesbare_docs or not api_key or te_groot,
         use_container_width=True,
     )
 
     if not api_key:
-        st.warning("Vul eerst je API key in via het zijpaneel.")
+        st.warning("Vul eerst je API key in via het zijpaneel (pijltje linksboven).")
+    elif agenda_files and not leesbare_docs:
+        st.error("Geen van de bestanden bevat leesbare tekst. Controleer of het geen scans zijn.")
     elif not agenda_files:
         st.caption("Upload minimaal één vergaderstuk om te beginnen.")
+    elif te_groot:
+        st.error(f"De stukken zijn te omvangrijk ({totaal_tekens // 1000}k tekens). Splits de bundel of laat bijlagen weg.")
+    elif totaal_tekens > WAARSCHUW_TEKENS:
+        st.warning(f"Grote bundel ({totaal_tekens // 1000}k tekens). De analyse kan enkele minuten duren.")
 
 
-with col2:
-    if analyseer_btn and agenda_files and api_key:
-        with st.spinner("📖  Stukken worden gelezen en geanalyseerd… (~30 seconden)"):
-            agenda_teksten = []
-            for f in agenda_files:
-                try:
-                    tekst = extract_text(f)
-                    agenda_teksten.append(tekst)
-                except Exception as e:
-                    st.error(f"Fout bij lezen van {f.name}: {e}")
+# ---------------------------------------------------------------------------
+# Rechterkolom: resultaat
+# ---------------------------------------------------------------------------
 
-            notulen_teksten = []
-            for f in notulen_files:
-                try:
-                    tekst = extract_text(f)
-                    notulen_teksten.append(tekst)
-                except Exception as e:
-                    st.error(f"Fout bij lezen van {f.name}: {e}")
+with col_out:
+    if analyseer_btn and leesbare_docs and api_key and not te_groot:
+        reset_resultaat()
+        agenda_tekst = combine_documents(agenda_docs, "Vergaderstukken")
+        notulen_tekst = combine_documents(notulen_docs, "Vorige notulen")
+        rbt_tekst = combine_documents(rbt_docs, "RBT-stukken")
+        datum_str = datum_tekst(vergaderdatum)
 
-            rbt_teksten = []
-            for f in rbt_files:
-                try:
-                    tekst = extract_text(f)
-                    rbt_teksten.append(tekst)
-                except Exception as e:
-                    st.error(f"Fout bij lezen van {f.name}: {e}")
+        st.session_state.update(
+            {
+                "agenda_tekst": agenda_tekst,
+                "notulen_tekst": notulen_tekst,
+                "rbt_tekst": rbt_tekst,
+                "vergader_type": vergader_type,
+                "vergaderdatum": datum_str,
+                "vergaderdatum_iso": vergaderdatum.isoformat() if vergaderdatum else "",
+                "vervolg": [],
+            }
+        )
 
-            agenda_tekst = "\n\n---\n\n".join(agenda_teksten)
-            notulen_tekst = "\n\n---\n\n".join(notulen_teksten)
-            rbt_tekst = "\n\n---\n\n".join(rbt_teksten)
-
-            try:
-                resultaat = analyseer_vergadering(
-                    api_key=api_key,
-                    vergader_type=vergader_type,
-                    agenda_tekst=agenda_tekst,
-                    notulen_tekst=notulen_tekst,
-                    rbt_tekst=rbt_tekst,
-                    opmerkingen=opmerkingen,
+        st.markdown('<div class="step">Briefing</div>', unsafe_allow_html=True)
+        st.caption("De briefing verschijnt terwijl hij wordt geschreven. Dit duurt meestal één tot enkele minuten.")
+        klaar = False
+        try:
+            with st.container(border=True):
+                resultaat = st.write_stream(
+                    analyseer_vergadering(
+                        api_key=api_key,
+                        vergader_type=vergader_type,
+                        agenda_tekst=agenda_tekst,
+                        notulen_tekst=notulen_tekst,
+                        rbt_tekst=rbt_tekst,
+                        opmerkingen=opmerkingen,
+                        vergaderdatum=datum_str,
+                    )
                 )
-                st.session_state["resultaat"] = resultaat
-                st.session_state["vergader_type"] = vergader_type
-            except Exception as e:
-                st.error(f"Fout bij analyse: {e}")
-
-    if "resultaat" in st.session_state:
-        resultaat = st.session_state["resultaat"]
-        vt = st.session_state["vergader_type"]
-
-        st.markdown(
-            f'<div class="result-container">',
-            unsafe_allow_html=True,
-        )
-        st.markdown(resultaat)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown(
-            '<div class="step-title" style="margin-top:24px;">📥 Exporteren</div>',
-            unsafe_allow_html=True,
-        )
-        ecol1, ecol2 = st.columns(2)
-
-        with ecol1:
-            if st.button("⬇️  Word-document (.docx)", use_container_width=True):
-                with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-                    export_to_word(resultaat, vt, tmp.name)
-                    with open(tmp.name, "rb") as f:
-                        st.download_button(
-                            label="✓  Klik om te downloaden",
-                            data=f.read(),
-                            file_name=f"vergadervoorbereiding_{vt.lower().replace(' ', '_')}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True,
-                        )
-                    os.unlink(tmp.name)
-
-        with ecol2:
-            st.download_button(
-                label="⬇️  Plain text (.txt)",
-                data=resultaat,
-                file_name=f"vergadervoorbereiding_{vt.lower().replace(' ', '_')}.txt",
-                mime="text/plain",
-                use_container_width=True,
+            st.session_state["resultaat"] = resultaat if isinstance(resultaat, str) else "".join(map(str, resultaat))
+            st.session_state.setdefault("eerdere", []).insert(
+                0,
+                {
+                    "titel": f"{vergader_type} · {datum_str} · {datetime.now().strftime('%H:%M')}",
+                    "resultaat": st.session_state["resultaat"],
+                    "vergader_type": vergader_type,
+                    "vergaderdatum": datum_str,
+                    "vergaderdatum_iso": st.session_state.get("vergaderdatum_iso", ""),
+                },
             )
+            klaar = True
+        except Exception as e:  # noqa: BLE001
+            fout = str(e)
+            if "authentication" in fout.lower() or "api key" in fout.lower() or "401" in fout:
+                st.error("De API key wordt niet geaccepteerd. Controleer de key in het zijpaneel.")
+            elif "overloaded" in fout.lower() or "529" in fout:
+                st.error("Claude is op dit moment overbelast. Probeer het over een minuut opnieuw.")
+            elif "rate" in fout.lower() and "limit" in fout.lower():
+                st.error("Te veel verzoeken in korte tijd. Wacht even en probeer opnieuw.")
+            else:
+                st.error(f"Fout bij analyse: {fout}")
+        if klaar:
+            st.rerun()
+
+    elif "resultaat" in st.session_state:
+        resultaat = st.session_state["resultaat"]
+        vt = st.session_state.get("vergader_type", vergader_type)
+        datum_str = st.session_state.get("vergaderdatum", "")
+        datum_iso = st.session_state.get("vergaderdatum_iso", "")
+
+        # Actiebalk
+        if "docx_bytes" not in st.session_state:
+            try:
+                st.session_state["docx_bytes"] = export_to_word_bytes(resultaat, vt, vergaderdatum=datum_str)
+            except Exception as e:  # noqa: BLE001
+                st.session_state["docx_bytes"] = None
+                st.warning(f"Word-export mislukt: {e}")
+
+        kop_l, kop_r = st.columns([6, 6])
+        with kop_l:
+            st.markdown(f'<div class="step">Briefing {html.escape(vt)}<span class="opt">{html.escape(datum_str)}</span></div>', unsafe_allow_html=True)
+        with kop_r:
+            b1, b2, b3 = st.columns(3)
+            with b1:
+                if st.session_state.get("docx_bytes"):
+                    st.download_button(
+                        "Word",
+                        data=st.session_state["docx_bytes"],
+                        file_name=bestandsnaam(vt, datum_iso, "docx"),
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                    )
+            with b2:
+                st.download_button(
+                    "Tekst",
+                    data=resultaat,
+                    file_name=bestandsnaam(vt, datum_iso, "md"),
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+            with b3:
+                if st.button("Nieuw", use_container_width=True, help="Resultaat wissen en opnieuw beginnen"):
+                    reset_resultaat()
+                    st.rerun()
+
+        with st.container(border=True):
+            st.markdown(verfraai(resultaat), unsafe_allow_html=True)
+
+        # Vervolgvragen
+        st.markdown('<div class="step" style="margin-top:22px">Vervolgvraag</div>', unsafe_allow_html=True)
+        st.markdown('<div class="hint">Vraag door op de stukken of de briefing. Bijvoorbeeld: "Wat staat er precies over de personeelskosten?" of "Maak de spreektekst bij punt 4 scherper."</div>', unsafe_allow_html=True)
+
+        for beurt in st.session_state.get("vervolg", []):
+            st.markdown(f'<div class="vraag">{html.escape(beurt["vraag"])}</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(verfraai(beurt["antwoord"]), unsafe_allow_html=True)
+
+        with st.form("vervolg_form", clear_on_submit=True):
+            vraag = st.text_input("Vervolgvraag", placeholder="Typ je vraag en druk op Enter", label_visibility="collapsed")
+            verstuur = st.form_submit_button("Vraag stellen")
+
+        if verstuur and vraag.strip():
+            geschiedenis = []
+            for beurt in st.session_state.get("vervolg", []):
+                geschiedenis.append({"role": "user", "content": beurt["vraag"]})
+                geschiedenis.append({"role": "assistant", "content": beurt["antwoord"]})
+            st.markdown(f'<div class="vraag">{html.escape(vraag)}</div>', unsafe_allow_html=True)
+            beantwoord = False
+            try:
+                with st.container(border=True):
+                    antwoord = st.write_stream(
+                        stel_vervolgvraag(
+                            api_key=api_key,
+                            agenda_tekst=st.session_state.get("agenda_tekst", ""),
+                            briefing=resultaat,
+                            geschiedenis=geschiedenis,
+                            vraag=vraag.strip(),
+                            notulen_tekst=st.session_state.get("notulen_tekst", ""),
+                            rbt_tekst=st.session_state.get("rbt_tekst", ""),
+                        )
+                    )
+                antwoord = antwoord if isinstance(antwoord, str) else "".join(map(str, antwoord))
+                st.session_state.setdefault("vervolg", []).append({"vraag": vraag.strip(), "antwoord": antwoord})
+                beantwoord = True
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Fout bij vervolgvraag: {e}")
+            if beantwoord:
+                st.rerun()
+
     else:
         st.markdown(
             """
-<style>
-  @keyframes float-icon {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-  }
-  .empty-state {
-    background: rgba(255,255,255,0.85);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255,255,255,0.7);
-    border-radius: 24px;
-    padding: 88px 40px;
-    text-align: center;
-    color: #64748B;
-    box-shadow: 0 12px 48px rgba(15,23,42,0.06);
-    position: relative;
-    overflow: hidden;
-  }
-  .empty-state::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 24px; right: 24px; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(99,102,241,0.4), transparent);
-  }
-  .empty-icon {
-    font-size: 72px;
-    margin-bottom: 24px;
-    opacity: 0.5;
-    display: inline-block;
-    animation: float-icon 3.5s ease-in-out infinite;
-    filter: drop-shadow(0 8px 16px rgba(30, 64, 175, 0.15));
-  }
-  .empty-title {
-    font-family: 'Playfair Display', Georgia, serif;
-    font-size: 22px;
-    font-weight: 700;
-    color: #1E1B4B;
-    margin-bottom: 8px;
-    letter-spacing: -0.4px;
-  }
-  .empty-sub {
-    font-size: 14px;
-    color: #64748B;
-    max-width: 320px;
-    margin: 0 auto;
-    line-height: 1.5;
-  }
-</style>
-<div class="empty-state">
-  <div class="empty-icon">✨</div>
-  <div class="empty-title">Klaar voor jouw briefing</div>
-  <div class="empty-sub">Selecteer een vergadering, upload de stukken, en je voorbereiding verschijnt hier.</div>
+<div class="empty">
+  <div class="t">Klaar voor je briefing</div>
+  <div class="s">Kies de vergadering, upload de stukken en klik op Analyseer. De briefing verschijnt hier, met daarna een Word-export en ruimte voor vervolgvragen.</div>
 </div>
 """,
             unsafe_allow_html=True,
         )
 
-# --- Footer ---
-year = datetime.now().year
+    # Eerdere briefings in deze sessie
+    eerdere = st.session_state.get("eerdere", [])
+    if len(eerdere) > 1 or (eerdere and "resultaat" not in st.session_state):
+        with st.expander(f"Eerdere briefings in deze sessie ({len(eerdere)})"):
+            for i, item in enumerate(eerdere):
+                c1, c2 = st.columns([8, 3])
+                c1.markdown(f"**{html.escape(item['titel'])}**")
+                if c2.button("Openen", key=f"open_{i}", use_container_width=True):
+                    reset_resultaat()
+                    st.session_state.update(
+                        {
+                            "resultaat": item["resultaat"],
+                            "vergader_type": item["vergader_type"],
+                            "vergaderdatum": item["vergaderdatum"],
+                            "vergaderdatum_iso": item.get("vergaderdatum_iso", ""),
+                            "vervolg": [],
+                        }
+                    )
+                    st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Voettekst
+# ---------------------------------------------------------------------------
+
 st.markdown(
-    f"""
-<div class="footer">
-  <strong>Vergadervoorbereiding</strong> · Gebouwd voor <em>Martin Dekker</em><br>
-  <span class="signature">© {year} · Met aandacht ontworpen ✦ Powered by Claude</span>
-</div>
-""",
+    f'<div class="footer">Vergadervoorbereiding v{APP_VERSIE} · Martin Dekker · {datetime.now().year}</div>',
     unsafe_allow_html=True,
 )

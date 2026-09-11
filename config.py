@@ -1,3 +1,22 @@
+"""
+Instellingen van de vergader-app.
+
+- MODEL / MAX_OUTPUT_TOKENS: welk Claude-model de analyse doet en hoe lang de briefing mag zijn.
+- WAARSCHUW_TEKENS / MAX_TEKENS: grenzen voor de totale omvang van de aangeleverde stukken.
+- VERGADER_TYPES: per overleg de rol van Martin, de context voor de analyse en waar hij op let.
+"""
+
+APP_VERSIE = "2.0"
+
+MODEL = "claude-opus-4-7"
+MAX_OUTPUT_TOKENS = 16000
+
+# Omvang van de stukken (in tekens). Boven WAARSCHUW_TEKENS krijgt Martin een waarschuwing dat
+# de analyse langer duurt; boven MAX_TEKENS wordt de analyse geblokkeerd.
+WAARSCHUW_TEKENS = 500_000
+MAX_TEKENS = 900_000
+
+
 VERGADER_TYPES = {
     "RBT": {
         "label": "RBT",
