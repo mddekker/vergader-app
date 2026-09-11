@@ -6,7 +6,7 @@ Instellingen van de vergader-app.
 - VERGADER_TYPES: per overleg de rol van Martin, de context voor de analyse en waar hij op let.
 """
 
-APP_VERSIE = "2.0"
+APP_VERSIE = "2.1"
 
 MODEL = "claude-opus-4-7"
 MAX_OUTPUT_TOKENS = 16000

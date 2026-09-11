@@ -12,6 +12,7 @@ from config import VERGADER_TYPES, APP_VERSIE, WAARSCHUW_TEKENS, MAX_TEKENS
 from pdf_reader import extract_document, combine_documents, SUPPORTED_EXTENSIONS
 from analyzer import analyseer_vergadering, stel_vervolgvraag
 from word_exporter import export_to_word_bytes
+import archief
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +132,10 @@ STYLES = """
     /* Vervolgvragen */
     .vraag { background: var(--soft); border-radius: 10px; padding: 10px 14px; margin: 10px 0 4px 0; font-size: 14px; font-weight: 600; color: var(--navy); }
 
+    .arch { font-size: 14px; padding: 6px 0; line-height: 1.4; }
+    .arch b { color: var(--navy); }
+    .arch .meta { display: block; font-size: 12px; color: var(--muted); }
+
     .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); }
 
     [data-testid="stSidebar"] { background: var(--soft) !important; border-right: 1px solid var(--line); }
@@ -192,6 +197,11 @@ def lees_bestanden(files) -> list:
         digest = hashlib.sha1(data).hexdigest()
         docs.append(_lees_bestand(data, f.name, digest))
     return docs
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def laad_archief(zoek: str = "") -> list:
+    return archief.zoeken(zoek) if zoek else archief.lijst()
 
 
 def toon_bestanden(docs: list):
@@ -270,7 +280,7 @@ def datum_tekst(d) -> str:
 
 
 def reset_resultaat():
-    for k in ("resultaat", "vervolg", "docx_bytes"):
+    for k in ("resultaat", "vervolg", "docx_bytes", "archief_id", "agenda_tekst", "notulen_tekst", "rbt_tekst"):
         st.session_state.pop(k, None)
 
 
@@ -439,6 +449,18 @@ with col_out:
                     "briefing_datum_iso": st.session_state.get("briefing_datum_iso", ""),
                 },
             )
+            if archief.is_beschikbaar():
+                try:
+                    st.session_state["archief_id"] = archief.opslaan(
+                        vergader_type=vergader_type,
+                        vergaderdatum_iso=st.session_state.get("briefing_datum_iso", ""),
+                        briefing=st.session_state["resultaat"],
+                        bestanden=[d.name for d in leesbare_docs],
+                        titel=f"{vergader_type} {datum_str}".strip(),
+                    )
+                    laad_archief.clear()
+                except Exception as e:  # noqa: BLE001
+                    st.warning(f"Briefing is gemaakt, maar opslaan in het archief lukte niet: {e}")
             klaar = True
         except Exception as e:  # noqa: BLE001
             fout = str(e)
@@ -501,6 +523,9 @@ with col_out:
         st.markdown('<div class="step" style="margin-top:22px">Vervolgvraag</div>', unsafe_allow_html=True)
         st.markdown('<div class="hint">Vraag door op de stukken of de briefing. Bijvoorbeeld: "Wat staat er precies over de personeelskosten?" of "Maak de spreektekst bij punt 4 scherper."</div>', unsafe_allow_html=True)
 
+        if not st.session_state.get("agenda_tekst"):
+            st.caption("Deze briefing komt uit het archief. Vervolgvragen gaan dan alleen over de briefing zelf; de originele stukken zijn niet meer beschikbaar.")
+
         for beurt in st.session_state.get("vervolg", []):
             st.markdown(f'<div class="vraag">{html.escape(beurt["vraag"])}</div>', unsafe_allow_html=True)
             with st.container(border=True):
@@ -532,6 +557,11 @@ with col_out:
                     )
                 antwoord = antwoord if isinstance(antwoord, str) else "".join(map(str, antwoord))
                 st.session_state.setdefault("vervolg", []).append({"vraag": vraag.strip(), "antwoord": antwoord})
+                if st.session_state.get("archief_id"):
+                    try:
+                        archief.update_vervolg(st.session_state["archief_id"], st.session_state["vervolg"])
+                    except Exception:  # noqa: BLE001
+                        pass
                 beantwoord = True
             except Exception as e:  # noqa: BLE001
                 st.error(f"Fout bij vervolgvraag: {e}")
@@ -549,25 +579,83 @@ with col_out:
             unsafe_allow_html=True,
         )
 
-    # Eerdere briefings in deze sessie
-    eerdere = st.session_state.get("eerdere", [])
-    if len(eerdere) > 1 or (eerdere and "resultaat" not in st.session_state):
-        with st.expander(f"Eerdere briefings in deze sessie ({len(eerdere)})"):
-            for i, item in enumerate(eerdere):
-                c1, c2 = st.columns([8, 3])
-                c1.markdown(f"**{html.escape(item['titel'])}**")
-                if c2.button("Openen", key=f"open_{i}", use_container_width=True):
+    # Archief
+    st.markdown('<div class="step" style="margin-top:28px">Archief</div>', unsafe_allow_html=True)
+    if archief.is_beschikbaar():
+        zoek = st.text_input("Zoeken in archief", placeholder="Zoek op overleg, datum of tekst", label_visibility="collapsed", key="archief_zoek")
+        try:
+            items = laad_archief(zoek.strip())
+        except Exception as e:  # noqa: BLE001
+            items = []
+            st.warning(f"Archief kon niet worden geladen: {e}")
+        if not items:
+            st.caption("Nog geen opgeslagen briefingen." if not zoek else "Niets gevonden.")
+        for item in items:
+            c1, c2, c3 = st.columns([7, 2, 2])
+            aangemaakt = (item.get("created_at") or "")[:16].replace("T", " ")
+            datum = item.get("vergaderdatum") or ""
+            if datum:
+                try:
+                    datum = datetime.fromisoformat(datum).strftime("%d-%m-%Y")
+                except ValueError:
+                    pass
+            bestanden = item.get("bestanden") or []
+            c1.markdown(
+                f'<div class="arch"><b>{html.escape(item.get("vergader_type", ""))}</b> · {html.escape(datum)}'
+                f'<span class="meta">gemaakt {html.escape(aangemaakt)}'
+                + (f' · {len(bestanden)} bestand(en): {html.escape(", ".join(bestanden)[:120])}' if bestanden else "")
+                + "</span></div>",
+                unsafe_allow_html=True,
+            )
+            if c2.button("Openen", key=f"open_{item['id']}", use_container_width=True):
+                rij = archief.ophalen(item["id"])
+                if rij:
                     reset_resultaat()
+                    d_iso = rij.get("vergaderdatum") or ""
+                    try:
+                        d_str = datum_tekst(datetime.fromisoformat(d_iso).date()) if d_iso else ""
+                    except ValueError:
+                        d_str = d_iso
                     st.session_state.update(
                         {
-                            "resultaat": item["resultaat"],
-                            "vergader_type": item["vergader_type"],
-                            "briefing_datum": item["briefing_datum"],
-                            "briefing_datum_iso": item.get("briefing_datum_iso", ""),
-                            "vervolg": [],
+                            "resultaat": rij["briefing"],
+                            "vergader_type": rij["vergader_type"],
+                            "briefing_datum": d_str,
+                            "briefing_datum_iso": d_iso,
+                            "vervolg": rij.get("vervolg") or [],
+                            "archief_id": rij["id"],
                         }
                     )
                     st.rerun()
+            if c3.button("Verwijder", key=f"del_{item['id']}", use_container_width=True):
+                try:
+                    archief.verwijderen(item["id"])
+                    laad_archief.clear()
+                    if st.session_state.get("archief_id") == item["id"]:
+                        reset_resultaat()
+                    st.rerun()
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"Verwijderen mislukt: {e}")
+    else:
+        st.caption("Archief niet ingesteld: " + archief.config_fout() + " Zie README voor de instructie.")
+        eerdere = st.session_state.get("eerdere", [])
+        if eerdere:
+            with st.expander(f"Briefingen in deze sessie ({len(eerdere)})"):
+                for i, item in enumerate(eerdere):
+                    c1, c2 = st.columns([8, 3])
+                    c1.markdown(f"**{html.escape(item['titel'])}**")
+                    if c2.button("Openen", key=f"sessie_open_{i}", use_container_width=True):
+                        reset_resultaat()
+                        st.session_state.update(
+                            {
+                                "resultaat": item["resultaat"],
+                                "vergader_type": item["vergader_type"],
+                                "briefing_datum": item["briefing_datum"],
+                                "briefing_datum_iso": item.get("briefing_datum_iso", ""),
+                                "vervolg": [],
+                            }
+                        )
+                        st.rerun()
 
 
 # ---------------------------------------------------------------------------
