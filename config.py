@@ -72,4 +72,23 @@ let hij extra op zorgvuldige communicatie en draagvlak bij de betrokken partijen
             "Wat moet er geëscaleerd worden en wat kan terug naar de projectorganisatie?",
         ],
     },
+    "Portfolioboard HCC": {
+        "label": "Portfolioboard HCC",
+        "rol": "voorzitter van de Portfolioboard van HumanCapitalCare",
+        "is_voorzitter": True,
+        "logo": "assets/logo_humantotalcare.png",
+        "context": """Je bereidt Martin voor als voorzitter van de Portfolioboard van HumanCapitalCare (HCC).
+De Portfolioboard stuurt op het geheel van projecten, initiatieven en veranderingen binnen HCC: welke initiatieven
+starten, doorgaan, worden bijgestuurd of stoppen. Als voorzitter bewaakt Martin de samenhang met de strategie,
+de prioritering, de beschikbare capaciteit en het budget, en zorgt hij dat besluiten over het portfolio helder
+en onderbouwd worden genomen. Hij kijkt over projecten heen: wat levert het geheel op, waar zit overlap of
+verdringing, en waar loopt de organisatie tegen haar veranderkracht aan.""",
+        "vraag_focus": [
+            "Past dit initiatief bij de strategie van HCC en wat is de bijdrage aan de doelen?",
+            "Wat vraagt het aan capaciteit en budget, en wat gaat er dan niet of later?",
+            "Welke portfoliobesluiten liggen voor (starten, doorgaan, bijsturen, stoppen) en is de onderbouwing voldoende?",
+            "Waar zit overlap, afhankelijkheid of verdringing met andere lopende projecten?",
+            "Ligt het portfolio als geheel op koers en waar wijkt het af van de vorige rapportage?",
+        ],
+    },
 }
